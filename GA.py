@@ -12,42 +12,49 @@ optimal_consensus - consensus sequence with the best cost found so far
 '''
 
 ############################## IMPORTS  ########################################
-
+from weighted_levenshtein import lev, osa, dam_lev
+from data.data import Data
 import pandas
 import random
 import math
 import sys
-
-########################## GLOBAL CONSTANTS ###################################
-
-POPULATION_SIZE = 4
-NUM_SEQUENCES = 4
-GENERATIONS = 0
-
+import numpy as np
 ########################### GLOBAL VARIABLES ##################################
 
-input_sequences = ['ACCTG','ACGAG','CCGCG','CCTGT']
+base_list = ['A', 'C', 'T', 'G']
+gap_char = '-'
+
+# input_sequences = ['ACCTG','ACGAG','CCGCG','CCTGT']
+# input_sequences = ['CGTAA','TACA'] # Want consensus to be AGC
+orchid_data = Data('./data/ls_orchid.fasta')
+input_sequences = list(orchid_data.unaligned_sequences.values())
+delete_costs = np.ones(128, dtype=np.float64)
+
+for base in base_list:
+    # Make deletion costs 0.1 (causes consensus sequences to prioritize being longer).
+    delete_costs[ord(base)] = 0.1
+longest_sequence_length = len(max(input_sequences))
+
 population = []
 fitness = []
 best_cost = 100000000000 #very large number
 optimal_consensus = ''
 
+########################## GLOBAL CONSTANTS ###################################
+
+POPULATION_SIZE = len(input_sequences)
+NUM_SEQUENCES =  len(input_sequences)
+GENERATIONS = 0
+
 ###########################  HELPER FUNCTIONS ##################################
 
 def calculate_edit_cost(candidate_consensus, sequence):
-    cost = 0
-    for i in range(0, len(sequence)):
-        # if nucleotides are the same in both sequences
-        if candidate_consensus[i] == sequence[i]:
-            cost += 0
-        # for now let's just assume 1 if they are not the same
-        elif candidate_consensus[i] != sequence[i]:
-            cost += 1
-    return cost
+    # Return the levenshtein_distance between two strings.
+    return lev(candidate_consensus, sequence, delete_costs=delete_costs)
 
 def calculate_consensus_score(candidate_consensus, sequences):
     consensus_score = 0
-    for i in range(POPULATION_SIZE):
+    for i in range(len(sequences)):
         # Calculate the edit cost for each sequence in the the population
         consensus_score += calculate_edit_cost(candidate_consensus, sequences[i])
     return consensus_score
@@ -69,7 +76,7 @@ def assign_fitness():
     global optimal_consensus
     global fitness
     fitness = []
-    for i in range(POPULATION_SIZE):
+    for i in range(len(input_sequences)):
         #calcualte the edit cost of a particular chromosome
         element_cost = calculate_consensus_score(population[i], input_sequences)
         #keep record of element cost and the optimal consensus while creating population
@@ -80,16 +87,6 @@ def assign_fitness():
         #we have to modify it, i.e the greater the score the smaller the fitness value
         fitness.append( 1 / float(element_cost))
     normalize_fitness(fitness)
-
-def choose_parent(population, probabilities):
-    i = 0
-    random_number = random.uniform(0,1)
-    #generate an index based on its probabilty(fitness)
-    while(random_number > 0):
-        random_number = random_number - probabilities[i]
-        i += 1
-    i -= 1
-    return population[i]
 
 ##just for progress bar
 def startProgress(title):
@@ -121,7 +118,7 @@ def endProgress():
 def populate():
     global population
     #initialize the population
-    for i in range(NUM_SEQUENCES):
+    for i in range(len(input_sequences)):
         population.append(input_sequences[i])
 
 ################################################################################
@@ -141,8 +138,7 @@ def reproduce():
     new_population = []
     for i in range(POPULATION_SIZE):
         ##choose the parents according to their fitness value
-        father = choose_parent(population,fitness)
-        mother = choose_parent(population,fitness)
+        father, mother = random.choices(population, fitness, k=2)
         child = crossover(father, mother)
         child = mutate(child)
         new_population.append(child)
@@ -159,12 +155,19 @@ def reproduce():
 '''
 
 def crossover(father, mother):
-    father_end = math.floor(random.uniform(0, len(input_sequences[0])-1))
+    if(len(father) > len(mother)):
+        # Add stars to beginning of mother.
+        mother = '*' * (len(father) - len(mother)) + mother
+    elif(len(mother) > len(father)):
+        # Add stars to end of father.
+        father = father + '*' * (len(mother) - len(father))
+
+    father_end = math.floor(random.uniform(0, len(father)-1))
     #create a new chromosome with the father's random DNA part
-    child = father[0:father_end+1]
+    child = father[0:father_end+1].strip('*')
     #complement the new chromosomes' DNA with the mother's random DNA part
-    for i in range(father_end+1, len(input_sequences[0])):
-        child += mother[i]
+    child += mother[(father_end+1):].strip('*')
+
     return child
 
 ###############################################################################
@@ -176,10 +179,32 @@ def crossover(father, mother):
 '''
 
 def mutate(sequence):
-    #randomly pick two items to swap
-    index_1 = random.randint(0, len(sequence)-1)
-    index_2 = random.randint(0, len(sequence)-1)
-    return swap(sequence, index_1, index_2)
+    # IF within 1/population_size chance then we mutate.
+    if(math.floor(random.uniform(0, 1/(1-POPULATION_SIZE)))):
+        chance = 1/(len(sequence))
+        new_sequence = ''
+        # For every nucleotide there is a 1/sequence_length chance of mutating.
+        for c in sequence:
+            if(chance != 1 and math.floor(random.uniform(0, 1/(1-chance))) == 1):
+                # If we have a mutation we can have substitution (most likely)
+                # 80%, insertion at 5% and deletion at 5%
+                if(math.floor(random.uniform(0, 1/(1-0.9))) == 1):
+                    # Substitution
+                    new_sequence += random.choice(base_list)
+                elif(math.floor(random.uniform(0, 1/(1-0.5))) == 1):
+                    # Insertion
+                    # If size is greater than 1.5x the largest, then don't add!
+                    if(len(sequence) > 1.5 * longest_sequence_length):
+                        new_sequence += c
+                        continue
+                    new_sequence += (c + random.choice(base_list))
+                else:
+                    # Deletion
+                    continue
+            else:
+                new_sequence += c
+
+    return new_sequence
 
 
 ###############################################################################
@@ -200,12 +225,14 @@ def main():
     #repeat the algorithm until the desired generations have been reached
     for i in range(GENERATIONS):
         assign_fitness()
-        reproduce();
+        reproduce()
         progress( i/GENERATIONS*100 )
     #end algorithm and print the result
     endProgress()
     print('Smaller cost found: {}'.format(best_cost))
     print('Consensus sequence: {}'.format(optimal_consensus))
+    if(optimal_consensus in input_sequences):
+        print("Optimal was one of the input_sequences...")
 
 
 if __name__ == "__main__":

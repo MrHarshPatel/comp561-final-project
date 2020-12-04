@@ -22,15 +22,16 @@ IUPAC_REV = {('A',): 'A',
              ('G', 'T'): 'K',
              ('T',): 'T',}
 
-
 class Data:
-    def __init__(self, fasta_file_path, muscle_path='./third_party/muscle.exe', debug=True):
+    def __init__(self, fasta_file_path, muscle_path='./third_party/muscle.exe', debug=True, writeFiles=False):
         self.debug = debug
+        self.writeFiles = writeFiles
         self.unaligned_sequences = self.read_fasta(fasta_file_path)
         self.muscle_aligned_sequences = self.muscle_align(fasta_file_path, muscle_path)
         self.summary_align = self.get_summary_align(self.out_aligned_file_path)
         self.align_consensus = self.get_consensus(self.summary_align)
-        self.write_consensus_to_file(fasta_file_path)
+        if(self.writeFiles):
+            self.write_consensus_to_file(fasta_file_path)
         self.total_multiple_alignment_time = self.alignment_time + self.consensus_from_alignment_time
 
     def get_summary_align(self, path):
@@ -75,16 +76,21 @@ class Data:
         path, filename = os.path.split(fasta_file_path)
 
         self.out_aligned_file_path = os.path.join(path, filename.split('.')[0] + '-aligned.fasta')
-        self.data_log('Starting to align with muscle.')
-        start = time.time()
+        self.alignment_time = 0
+        if(self.writeFiles):
 
-        muscle_cline = MuscleCommandline(muscle_path, input=fasta_file_path, out=self.out_aligned_file_path)
-        _ = muscle_cline()
+            self.data_log('Starting to align with muscle.')
+            start = time.time()
 
-        end = time.time()
+            muscle_cline = MuscleCommandline(muscle_path, input=fasta_file_path, out=self.out_aligned_file_path)
+            _ = muscle_cline()
 
-        self.alignment_time = end - start
-        self.data_log(f'Writing muscle aligned sequences to {self.out_aligned_file_path}.')
+            end = time.time()
+
+            self.alignment_time = end - start
+            self.data_log(f'Writing muscle aligned sequences to {self.out_aligned_file_path}.')
+        else:
+            self.data_log('Already have aligned file, reading from it...')
         # Get consensus sequence and put in separate file.
         alignment = self.read_fasta(self.out_aligned_file_path)
         return alignment
