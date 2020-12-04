@@ -21,18 +21,108 @@ import sys
 import numpy as np
 ########################### GLOBAL VARIABLES ##################################
 
-base_list = ['A', 'C', 'T', 'G']
 gap_char = '-'
+substitution_cost_matrix = {
+    'A': {},
+    'C': {},
+    'T': {},
+    'G': {},
+    'R': {
+        'A': 0.34,
+        'G': 0.34
+    },
+    'Y': {
+        'C': 0.34,
+        'T': 0.34
+    },
+    'S': {
+        'G': 0.34,
+        'C': 0.34
+    },
+    'W': {
+        'A': 0.34,
+        'T': 0.34
+    },
+    'K': {
+        'G': 0.34,
+        'T': 0.34
+    },
+    'M': {
+        'A': 0.34,
+        'C': 0.34
+    },
+    'B': {
+        'C': 0.48,
+        'G': 0.48,
+        'T': 0.48,
+    },
+    'D': {
+        'A': 0.48,
+        'G': 0.48,
+        'T': 0.48,
+    },
+    'H': {
+        'A': 0.48,
+        'C': 0.48,
+        'T': 0.48,
+    },
+    'V': {
+        'A': 0.48,
+        'C': 0.48,
+        'G': 0.48,
+    },
+    'N': {
+        'A': 0.56,
+        'C': 0.56,
+        'G': 0.56,
+        'T': 0.56
+    },
+}
+base_list = list(substitution_cost_matrix.keys())
+base_list.append(gap_char)
+
+# Relative mutation chances used to decentivize ambiguities
+# Also it's usually better to be less ambiguous.
+relative_mutation_chances = []
+for base in base_list:
+    if(base in 'ACGT'):
+        relative_mutation_chances.append(0.5)
+    elif(base in 'RYSWKM'):
+        relative_mutation_chances.append(0.5)
+    elif(base in 'BDHV'):
+        relative_mutation_chances.append(0.5)
+    else:
+        relative_mutation_chances.append(0.5)
+
 
 # input_sequences = ['ACCTG','ACGAG','CCGCG','CCTGT']
-# input_sequences = ['CGTAA','TACA'] # Want consensus to be AGC
-orchid_data = Data('./data/ls_orchid.fasta')
-input_sequences = list(orchid_data.unaligned_sequences.values())
-delete_costs = np.ones(128, dtype=np.float64)
+# input_sequences = ['CGTAA','TACA']
+orchid_data = Data('./data/test_orchid.fasta', writeFiles=True)
+# orchid_data = Data('./data/test.fasta', writeFiles=True)
 
+print(orchid_data.align_consensus)
+input_sequences = list(orchid_data.unaligned_sequences.values())[:30]
+
+delete_costs = np.ones(128, dtype=np.float64)
 for base in base_list:
-    # Make deletion costs 0.1 (causes consensus sequences to prioritize being longer).
-    delete_costs[ord(base)] = 0.1
+    # Make deletion costs 0.8 (causes consensus sequences to prioritize being longer).
+    delete_costs[ord(base)] = 0.8
+
+# Removing gaps from consensus -> sequence cost is 0.01 # almost nothing.
+delete_costs[ord(gap_char)] = 0.01
+
+insertion_costs = np.ones(128, dtype=np.float64)
+for base in base_list:
+    insertion_costs[ord(base)] = 2
+
+substitute_costs = np.ones((128, 128), dtype=np.float64)
+for key in substitution_cost_matrix:
+    if(substitution_cost_matrix[key] == {}):
+        continue
+    for replacement_char in substitution_cost_matrix[key]:
+        cost = substitution_cost_matrix[key][replacement_char]
+        substitute_costs[ord(key)][ord(replacement_char)] = cost
+
 longest_sequence_length = len(max(input_sequences))
 
 population = []
@@ -50,7 +140,7 @@ GENERATIONS = 0
 
 def calculate_edit_cost(candidate_consensus, sequence):
     # Return the levenshtein_distance between two strings.
-    return lev(candidate_consensus, sequence, delete_costs=delete_costs)
+    return lev(candidate_consensus, sequence, delete_costs=delete_costs, substitute_costs=substitute_costs, insert_costs=insertion_costs)
 
 def calculate_consensus_score(candidate_consensus, sequences):
     consensus_score = 0
@@ -187,10 +277,10 @@ def mutate(sequence):
         for c in sequence:
             if(chance != 1 and math.floor(random.uniform(0, 1/(1-chance))) == 1):
                 # If we have a mutation we can have substitution (most likely)
-                # 80%, insertion at 5% and deletion at 5%
+                # 90% substitution, insertion at 5% and deletion at 5%
                 if(math.floor(random.uniform(0, 1/(1-0.9))) == 1):
                     # Substitution
-                    new_sequence += random.choice(base_list)
+                    new_sequence += random.choices(base_list,relative_mutation_chances, k=1)[0]
                 elif(math.floor(random.uniform(0, 1/(1-0.5))) == 1):
                     # Insertion
                     # If size is greater than 1.5x the largest, then don't add!
@@ -199,8 +289,12 @@ def mutate(sequence):
                         continue
                     new_sequence += (c + random.choice(base_list))
                 else:
-                    # Deletion
-                    continue
+                    # Deletion only if new_sequence length is > 0.
+                    # This is to prevent sequence from going empty.
+                    if(len(new_sequence) > 0):
+                        continue
+                    else:
+                        new_sequence += c
             else:
                 new_sequence += c
 
@@ -230,7 +324,8 @@ def main():
     #end algorithm and print the result
     endProgress()
     print('Smaller cost found: {}'.format(best_cost))
-    print('Consensus sequence: {}'.format(optimal_consensus))
+    print('Consensus sequence found: {}'.format(optimal_consensus))
+    print(calculate_consensus_score(orchid_data.align_consensus, input_sequences))
     if(optimal_consensus in input_sequences):
         print("Optimal was one of the input_sequences...")
 

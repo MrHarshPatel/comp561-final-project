@@ -118,11 +118,9 @@ class Data:
         plu            plurality for calling a consensus character
         use_ambi - uses IUPAC ambiguity codes if possible in place of errorchar
         """
-
         # remove any base that has a zero count.
         # convert fractional frequencies to log2 scale
         tabdict = dict([(k,math.log(v,2)) for k,v in tabdict.items() if v > 0])
-
         # if our frequency table no remaining entries, error
         if len(tabdict) == 0:
             return errorchar
@@ -160,6 +158,9 @@ class Data:
         
         if len(nuc) > 1:
             if use_ambi:
+                # Remove gap first.
+                if(gap in nuc):
+                    nuc.remove(gap)
                 return IUPAC_REV.get(tuple(sorted(nuc)), errorchar)
             else:
                 return errorchar
