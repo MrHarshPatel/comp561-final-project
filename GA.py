@@ -19,6 +19,9 @@ import random
 import math
 import sys
 import numpy as np
+from datetime import datetime
+from matplotlib import pyplot as plt
+
 ########################### GLOBAL VARIABLES ##################################
 
 gap_char = '-'
@@ -98,7 +101,8 @@ for base in base_list:
 # input_sequences = ['ACCTG','ACGAG','CCGCG','CCTGT']
 # input_sequences = ['CGTAA','TACA']
 orchid_data = Data('./data/test_orchid.fasta', writeFiles=True)
-# orchid_data = Data('./data/test.fasta', writeFiles=True)
+#orchid_data = Data('./data/test_orchid_length.fasta', writeFiles=True)
+#orchid_data = Data('./data/test.fasta', writeFiles=True)
 
 print(orchid_data.align_consensus)
 input_sequences = list(orchid_data.unaligned_sequences.values())[:30]
@@ -160,6 +164,7 @@ def normalize_fitness(fitness):
         total_sum += fitness[i]
     for i in range(POPULATION_SIZE):
         fitness[i] = (fitness[i] / total_sum)
+    return fitness
 
 def assign_fitness():
     global best_cost
@@ -176,7 +181,7 @@ def assign_fitness():
         #since we want to have a greater fitness value for a smaller score
         #we have to modify it, i.e the greater the score the smaller the fitness value
         fitness.append( 1 / float(element_cost))
-    normalize_fitness(fitness)
+    return float(best_cost)
 
 ##just for progress bar
 def startProgress(title):
@@ -300,6 +305,20 @@ def mutate(sequence):
 
     return new_sequence
 
+###############################################################################
+
+'''
+GRAPH
+    Plot the accuracy reached with respect to the generations.
+'''
+def graph(accuracies):
+    plt.plot(accuracies[0:50], linewidth=2, color="black")
+    plt.xlabel("Iteration", fontsize=10)
+    plt.ylabel("Cost", fontsize=10)
+    plt.xticks(np.arange(0, 50, 5), fontsize=10)
+    plt.yticks(np.arange(1200, 1300, 10), fontsize=10)
+    plt.show()
+
 
 ###############################################################################
 
@@ -312,22 +331,41 @@ def mutate(sequence):
 
 def main():
     global GENERATIONS
+
     GENERATIONS = int(input("Number of generations desired (1000 recommended) : "))
+    accuracies = np.empty(shape=(GENERATIONS))
+
     startProgress('Generations')
+    #Time it
+    before = datetime.now()
+
     #set up the population
     populate()
     #repeat the algorithm until the desired generations have been reached
     for i in range(GENERATIONS):
-        assign_fitness()
+        best_cost = assign_fitness()
+        #store the accuray of current generation just for information's sake
+        accuracies[i] = best_cost
         reproduce()
         progress( i/GENERATIONS*100 )
     #end algorithm and print the result
     endProgress()
+
+    #Time it
+    after = datetime.now()
+    difference = (after - before).total_seconds()
+
     print('Smaller cost found: {}'.format(best_cost))
     print('Consensus sequence found: {}'.format(optimal_consensus))
-    print(calculate_consensus_score(orchid_data.align_consensus, input_sequences))
+    print('Time spent by GA: {}'.format(difference))
+
+    print('Consensus score by muscle: {}'.format(calculate_consensus_score(orchid_data.align_consensus, input_sequences)))
+    print('Time spent by muscle: {}'.format(orchid_data.total_multiple_alignment_time))
     if(optimal_consensus in input_sequences):
         print("Optimal was one of the input_sequences...")
+
+    graph(accuracies)
+
 
 
 if __name__ == "__main__":

@@ -6,7 +6,7 @@ from Bio.Align import AlignInfo
 import sys
 
 # Align using muscle.
-muscle_exe = "../third_party/muscle.exe"
+muscle_exe = "../third_party/muscle3.8.31_i86darwin64"
 in_file = sys.argv[1]
 out_aligned_file = sys.argv[1].split('.')[0] + '-aligned.fasta'
 muscle_cline = MuscleCommandline(muscle_exe, input=in_file, out=out_aligned_file)

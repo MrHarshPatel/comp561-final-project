@@ -23,7 +23,7 @@ IUPAC_REV = {('A',): 'A',
              ('T',): 'T',}
 
 class Data:
-    def __init__(self, fasta_file_path, muscle_path='./third_party/muscle.exe', debug=True, writeFiles=False):
+    def __init__(self, fasta_file_path, muscle_path='./third_party/muscle3.8.31_i86darwin64', debug=True, writeFiles=False):
         self.debug = debug
         self.writeFiles = writeFiles
         self.unaligned_sequences = self.read_fasta(fasta_file_path)
@@ -103,7 +103,7 @@ class Data:
         end = time.time()
         self.consensus_from_alignment_time = end - start
         return consensus
-    
+
     def write_consensus_to_file(self, fasta_file_path):
         path, filename = os.path.split(fasta_file_path)
         out_consensus_path = os.path.join(path, filename.split('.')[0] + '-consensus.txt')
@@ -132,21 +132,12 @@ class Data:
         # order nucleotides by increasing frequency
         sortedkeys = sorted(tabdict.keys(), key=lambda k: tabdict[k], reverse=True)
 
-        # Collect the nucleotides that constitute a majority of samples at a site.
-        # We want to emit ambiguity codes that summarize a position
-        # while avoiding truly low-frequency bases.  An alignment motif would convey
-        # more information, and perhaps that's what one should use, but a consensus
-        # sequence must express each site in only a single letter so some loss of
-        # information is inevitable.
-        #
-        # Our cheesy algorithm is to include all bases whose frequency is
-        # at least half that of the next highest frequency nucleotide.
         nuc = [sortedkeys[0]]
 
         for i,v in enumerate(sortedkeys):
             if i == 0:
                 continue
-                
+
             # calculate log fold change between successive frequencies.
             logf = tabdict[sortedkeys[i - 1]]- tabdict[v]
 
@@ -155,7 +146,7 @@ class Data:
             else:
                 # otherwise stop looking.
                 break
-        
+
         if len(nuc) > 1:
             if use_ambi:
                 # Remove gap first.
@@ -169,23 +160,23 @@ class Data:
 
     def _tabulate(self, seqList, start = 0, end = None):
         """List of dictionaries, each holding nucleotide frequences for a single site in multiple alignment."""
-        if end is None: 
-            end = len(seqList.alignment._records[0].seq) 
-    
-        if start < 0 or end > len(seqList.alignment._records[0].seq): 
-            raise ValueError("Start (%s) and end (%s) are not in the range %s to %s" 
-                            % (start, end, 0, len(seqList.alignment._records[0].seq))) 
+        if end is None:
+            end = len(seqList.alignment._records[0].seq)
+
+        if start < 0 or end > len(seqList.alignment._records[0].seq):
+            raise ValueError("Start (%s) and end (%s) are not in the range %s to %s"
+                            % (start, end, 0, len(seqList.alignment._records[0].seq)))
 
         all_letters = seqList._get_all_letters()
         chars_to_ignore = []
         dictList = []
-        for residue_num in range(start, end): 
-            dictList.append(seqList._get_letter_freqs(residue_num, 
-                                                seqList.alignment._records, 
+        for residue_num in range(start, end):
+            dictList.append(seqList._get_letter_freqs(residue_num,
+                                                seqList.alignment._records,
                                                 all_letters, chars_to_ignore))
 
         return dictList
-    
+
     def data_log(self, log):
         if(self.debug):
             print(f'[ DATA ]: {log}')
